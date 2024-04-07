@@ -14,18 +14,18 @@ import * as logger from "firebase-functions/logger";
 // https://firebase.google.com/docs/functions/typescript
 
 exports.protectedHelloWorld = onCall(
-    {
-        enforceAppCheck: true, // Reject requests with missing or invalid App Check tokens.
-    },
-    (request) => {
-        // request.app contains data from App Check, including the app ID.
-        // Your function logic follows.
-        console.log("received request from app", request.app?.appId);
-    }
+  {
+    // Reject requests with missing or invalid App Check tokens.
+    enforceAppCheck: true,
+  },
+  (request) => {
+    // request.app contains data from App Check, including the app ID.
+    // Your function logic follows.
+    console.log("received request from app", request.app?.appId);
+  }
 );
 
-
 export const helloWorld = onRequest((request, response) => {
-    logger.info("Hello logs!", {structuredData: true});
-    response.send("Hello from Firebase!");
+  logger.info("Hello logs!", {structuredData: true});
+  response.send("Hello from Firebase!");
 });

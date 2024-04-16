@@ -39,8 +39,15 @@ const db = firestore();
 
 // nifty little function that creates a user document for when someone signs up
 export const createUserDocument = functions.auth.user().onCreate((user) => {
-  db.collection("users").doc(user.uid).set(JSON.parse(JSON.stringify(user)));
+  const userData = {
+    ...user.toJSON(), // Convert user object to JSON
+    apiResets: 200, // Initialize apiResets field with null
+    apiCallsLimit: 0, // Initialize apiCallsLimit field with 0
+  };
+
+  return db.collection("users").doc(user.uid).set(userData);
 });
+
 exports.protectedHelloWorld = onCall(
   {
     // Reject requests with missing or invalid App Check tokens.

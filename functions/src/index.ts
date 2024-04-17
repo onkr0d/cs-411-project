@@ -9,7 +9,9 @@
 import * as functions from "firebase-functions";
 import {onCall, onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
-import {initializeApp} from "firebase-admin/app";
+import * as admin from "firebase-admin";
+import {Timestamp} from "firebase-admin/firestore";
+// https://github.com/firebase/firebase-admin-node/discussions/1959#discussioncomment-3985176
 
 import {
   Configuration,
@@ -21,26 +23,44 @@ import {
   PlaidEnvironments,
   Products,
 } from "plaid";
-import {firestore} from "firebase-admin";
 
 const configuration = new Configuration({
   basePath: PlaidEnvironments.sandbox,
   baseOptions: {
     headers: {
-      "PLAID_CLIENT_ID": process.env.PLAID_CLIENT_ID,
-      "PLAID_SECRET": process.env.PLAID_SANDBOX_KEY,
+      PLAID_CLIENT_ID: process.env.PLAID_CLIENT_ID,
+      PLAID_SECRET: process.env.PLAID_SANDBOX_KEY,
     },
   },
 });
 const plaidClient = new PlaidApi(configuration);
 
-initializeApp();
-const db = firestore();
+admin.initializeApp();
 
 // nifty little function that creates a user document for when someone signs up
-export const createUserDocument = functions.auth.user().onCreate((user) => {
-  db.collection("users").doc(user.uid).set(JSON.parse(JSON.stringify(user)));
+export const updateUserFields = functions.auth.user().onCreate(async (user) => {
+  const {uid, email, displayName} = user;
+
+  const date = new Date();
+  date.setHours(date.getHours() + 1);
+  const timeStamp = Timestamp.fromDate(date);
+
+  try {
+    await admin.firestore().collection("users").doc(uid).set(
+      {
+        email,
+        displayName,
+        uid,
+        apiCallLimit: 20,
+        limitResetsAt: timeStamp,
+      },
+      {merge: true},
+    );
+  } catch (error) {
+    console.error("Error updating user fields:", error);
+  }
 });
+
 exports.protectedHelloWorld = onCall(
   {
     // Reject requests with missing or invalid App Check tokens.
@@ -50,7 +70,7 @@ exports.protectedHelloWorld = onCall(
     // request.app contains data from App Check, including the app ID.
     // Your function logic follows.
     console.log("received request from app", request.app?.appId);
-  }
+  },
 );
 
 export const helloWorld = onRequest((request, response) => {
@@ -80,7 +100,8 @@ exports.insitutionGet = onRequest(
     } catch (error) {
       response.send("Error in getting institutions");
     }
-  });
+  },
+);
 // https://plaid.com/docs/api/institutions/#institutionsget_by_id
 exports.insitutionGetById = onRequest(
   {
@@ -100,7 +121,8 @@ exports.insitutionGetById = onRequest(
     } catch (error) {
       response.send("Error in getting institution");
     }
-  });
+  },
+);
 // https://plaid.com/docs/api/institutions/#institutionssearch
 exports.institutionsSearch = onRequest(
   {
@@ -121,7 +143,8 @@ exports.institutionsSearch = onRequest(
     } catch (error) {
       response.send("Error in getting institution");
     }
-  });
+  },
+);
 
 // ex: http://127.0.0.1:5001/cs411-63def/us-central1/helloWorld?name=bob&id=1234
 // if u do console.log(request.query.name); and console.log(request.query.id);

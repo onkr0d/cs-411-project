@@ -117,7 +117,7 @@ export default function Home() {
                             auth={getAuth()}
                             config={{
                                 continueUrl: "localhost:3000",
-                                // signInSuccessUrl: "/",
+                                signInSuccessUrl: "/",
                                 signInOptions: [
                                     {
                                         provider: "google.com",

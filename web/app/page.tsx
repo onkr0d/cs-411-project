@@ -1,9 +1,13 @@
 "use client";
 import {useEffect, useState} from "react";
 import dynamic from "next/dynamic";
-import {initializeApp} from "firebase/app";
+import {FirebaseApp, initializeApp} from "firebase/app";
 import {getAuth, onAuthStateChanged, User} from "firebase/auth";
 import {initializeAppCheck, ReCaptchaEnterpriseProvider,} from "firebase/app-check";
+import {usePlaidLink} from 'react-plaid-link';
+import {connectFunctionsEmulator, getFunctions, httpsCallable} from 'firebase/functions';
+import firebase from "@firebase/app-compat";
+
 
 // @ts-ignore
 const FirebaseUIReact = dynamic(() => import("firebaseui-react"), {
@@ -23,6 +27,21 @@ const firebaseConfig = {
 export default function Home() {
     const [firebaseInitialized, setFirebaseInitialized] = useState(false);
     const [user, setUser] = useState<User | null>(null);
+    const [linkToken, setLinkToken] = useState(null);
+
+    const generateToken = async (app: FirebaseApp) => {
+        const functions = getFunctions(app);
+        // yeah nice one google - manually use emulator since it doesn't automatically detect it
+        connectFunctionsEmulator(functions, 'localhost', 5001);
+
+        const linkTokenFunction = httpsCallable(functions, 'createNewLinkToken');
+        linkTokenFunction()
+            .then((result) => {
+                console.log("getting a new link token!")
+                console.log(result)
+            })
+    };
+
 
     useEffect(() => {
         const app = initializeApp(firebaseConfig);
@@ -38,11 +57,13 @@ export default function Home() {
 
         const unsubscribe = onAuthStateChanged(getAuth(), (user) => {
             setUser(user);
+            if (user != null) {
+                generateToken(app)
+            }
         });
 
         setFirebaseInitialized(true);
         console.log("Firebase initialized");
-
         return () => unsubscribe(); // Clean up the subscription when component unmounts
     }, []);
 
@@ -60,6 +81,38 @@ export default function Home() {
                 console.error(error);
             });
     };
+
+    // Render Plaid Link component if linkToken is available and user is signed in
+    const renderPlaidLink = () => {
+        if (linkToken && user) {
+            const onSuccess = (public_token: string, metadata: any) => {
+                // send public_token to server
+                const response = fetch('/api/set_access_token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({public_token}),
+                });
+                // Handle response ...
+            };
+
+            const config = {
+                token: linkToken,
+                onSuccess,
+            };
+
+            // eslint-disable-next-line react-hooks/rules-of-hooks
+            const {open, ready} = usePlaidLink(config);
+
+            return (
+                <button onClick={() => open()} disabled={!ready}>
+                    Link account
+                </button>
+            );
+        }
+        return null;
+    }
 
     return (
         <div>
@@ -79,7 +132,7 @@ export default function Home() {
                                     alt="Avatar"
                                     src={
                                         user
-                                            ? user.photoURL!
+                                            ? user.photoURL? user.photoURL : "https://daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
                                             : "https://daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
                                     }
                                 />{" "}
@@ -109,7 +162,7 @@ export default function Home() {
             <div className={"bg-base-100 h-screen grid place-content-center"}>
                 {firebaseInitialized ? ( // Render component based on firebaseInitialized state
                     user ? ( // If user is signed in, render welcome message
-                        <p>Welcome back, {user.displayName}</p>
+                        renderPlaidLink()
                     ) : (
                         // If user is not signed in, render FirebaseUI component
                         <FirebaseUIReact

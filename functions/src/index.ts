@@ -134,12 +134,12 @@ exports.insitutionGet = onRequest(
     },
 );
 // https://plaid.com/docs/api/institutions/#institutionsget_by_id
-exports.insitutionGetById = onRequest(
+exports.institutionGetById = onCall(
     {
         // Reject requests with missing or invalid App Check tokens.
         enforceAppCheck: true,
     },
-    async (request, response) => {
+    async (request) => {
         const procRequest: InstitutionsGetByIdRequest = {
             institution_id: "ins_109512",
             country_codes: [CountryCode.Us],
@@ -149,8 +149,9 @@ exports.insitutionGetById = onRequest(
             const institution = response.data.institution;
             // need to figure out how to send proper response
             logger.info(institution);
+            return {institution: institution};
         } catch (error) {
-            response.send("Error in getting institution");
+            return {error: "Error in getting institution"};
         }
     },
 );

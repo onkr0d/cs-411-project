@@ -109,10 +109,11 @@ exports.createNewLinkToken = onCall(
         return {error: "Error in creating link token"};
     },
 );
+// will be uncommented once I figure out how accessToken works
 /*
 exports.accountBalGet = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: false,
   },
   async(request) => {
     const procRequest: AccountsGetRequest = {
@@ -132,7 +133,7 @@ exports.accountBalGet = onCall(
 exports.transactionsGet = onCall (
 
   {
-    enforceAppCheck: true,
+    enforceAppCheck: false,
   },
   async(request) => {
     const procRequest: TransactionsGetRequest = {
@@ -151,9 +152,9 @@ exports.transactionsGet = onCall (
   }
 )
 */
-exports.getCatgeories = onCall(
+exports.getCategories = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: false,
   },
   async (request) => {
     try {
@@ -169,10 +170,10 @@ exports.getCatgeories = onCall(
 // problem with these functions is that they would timeout rather than actually finish
 // they will log everything in console, but still would timeout instead of finishing execution
 // https://plaid.com/docs/api/institutions/#institutionsget
-exports.insitutionGet = onCall(
+exports.institutionGet = onCall(
     {
         // Reject requests with missing or invalid App Check tokens.
-        enforceAppCheck: true,
+        enforceAppCheck: false,
     },
     async (request) => {
         const procRequest: InstitutionsGetRequest = {

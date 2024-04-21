@@ -7,18 +7,14 @@
  * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 import * as functions from "firebase-functions";
-<<<<<<< HEAD
-import {onCall} from "firebase-functions/v2/https";
-=======
-import {CallableRequest, onCall, onRequest} from "firebase-functions/v2/https";
->>>>>>> origin
+import {CallableRequest, onCall} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import {Timestamp} from "firebase-admin/firestore";
 
 // https://github.com/firebase/firebase-admin-node/discussions/1959#discussioncomment-3985176
 import {
-  //AccountsGetRequest,
+    AccountsGetRequest,
     Configuration,
     CountryCode,
     InstitutionsGetByIdRequest,
@@ -28,7 +24,7 @@ import {
     PlaidApi,
     PlaidEnvironments,
     Products,
-    //TransactionsGetRequest,
+    TransactionsGetRequest,
 } from "plaid";
 
 const configuration = new Configuration({
@@ -41,7 +37,6 @@ const configuration = new Configuration({
     },
 });
 const plaidClient = new PlaidApi(configuration);
-//const accessToken = "";
 admin.initializeApp();
 
 // nifty little function that creates a user document for when someone signs up
@@ -101,17 +96,22 @@ exports.createNewLinkToken = onCall(
         return {error: "Error in creating link token"};
     },
 );
-// will be uncommented once I figure out how accessToken works
+// still need to figure out how to get access token
 /*
 exports.accountBalGet = onCall(
   {
     enforceAppCheck: false,
   },
-  async(request) => {
-    const procRequest: AccountsGetRequest = {
-      access_token: accessToken,
-    };
+  async(request: CallableRequest<any>) => {
+    if (!request.auth || !request.auth.uid) {
+        logger.error("Error in getting auth uid");
+        return {error: "Error in getting auth uid"};
+    }
+    const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
     try {
+        const procRequest: AccountsGetRequest = {
+            accessToken: userDoc.data()?.access_token?,
+        };
       const response = await plaidClient.accountsBalanceGet(procRequest);
       const accounts = response.data.accounts;
       logger.log(accounts);
@@ -121,7 +121,6 @@ exports.accountBalGet = onCall(
     }
   }
 
-<<<<<<< HEAD
 )
 exports.transactionsGet = onCall (
 
@@ -146,20 +145,20 @@ exports.transactionsGet = onCall (
 )
 */
 exports.getCategories = onCall(
-  {
-    enforceAppCheck: false,
-  },
-  async (request) => {
-    try {
-      const response = await plaidClient.categoriesGet({});
-      const categories = response.data.categories;
-      return categories;
-    } catch (error) {
-      return error;
+    {
+      enforceAppCheck: false,
+    },
+    async (request) => {
+      try {
+        const response = await plaidClient.categoriesGet({});
+        const categories = response.data.categories;
+        return categories;
+      } catch (error) {
+        return error;
+      }
     }
-  }
-)
-=======
+  )
+
 exports.saveAccessToken = onCall(
     {
         enforceAppCheck: true,
@@ -188,7 +187,6 @@ exports.saveAccessToken = onCall(
     },
 );
 
->>>>>>> origin
 
 // problem with these functions is that they would timeout rather than actually finish
 // they will log everything in console, but still would timeout instead of finishing execution

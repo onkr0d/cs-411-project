@@ -7,7 +7,11 @@
  * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 import * as functions from "firebase-functions";
+<<<<<<< HEAD
 import {onCall} from "firebase-functions/v2/https";
+=======
+import {CallableRequest, onCall, onRequest} from "firebase-functions/v2/https";
+>>>>>>> origin
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import {Timestamp} from "firebase-admin/firestore";
@@ -56,7 +60,8 @@ export const onUserCreate = functions.auth.user().onCreate(async (user) => {
                 uid,
                 apiCallLimit: 20,
                 limitResetsAt: timeStamp,
-                plaidToken: null,
+                plaidAccessToken: null,
+                itemID: null,
             },
             {merge: true},
         );
@@ -66,34 +71,20 @@ export const onUserCreate = functions.auth.user().onCreate(async (user) => {
     }
 });
 
-exports.protectedHelloWorld = onCall(
-    {
-        // Reject requests with missing or invalid App Check tokens.
-        enforceAppCheck: true,
-    },
-    (request) => {
-        // request.app contains data from App Check, including the app ID.
-        // Your function logic follows.
-        logger.log("Hello logs!");
-        return "Hello " + request.data.name;
-    },
-);
-
 exports.createNewLinkToken = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
-    async (request) => {
-        // hardcode user id for now - need to get their firebase auth uid
-        const realClientUserId = request.auth?.uid || "auth is undefined :(";
-        if (realClientUserId === "auth is undefined :(") {
+    async (request: CallableRequest<any>) => {
+        if (!request.auth || !request.auth.uid) {
             logger.error("Error in getting auth uid");
             return {error: "Error in getting auth uid"};
         }
-        logger.info("Real client user id:", realClientUserId);
+        const userID = request.auth.uid;
+        logger.info("User id:", userID);
         const linkTokenRequest: LinkTokenCreateRequest = {
             user: {
-                client_user_id: realClientUserId,
+                client_user_id: userID,
             },
             client_name: "FiFi",
             products: [Products.Auth],
@@ -102,7 +93,8 @@ exports.createNewLinkToken = onCall(
         };
         try {
             const createTokenResponse = await plaidClient.linkTokenCreate(linkTokenRequest);
-            return createTokenResponse.data;
+            logger.info("Link token created:", createTokenResponse.data);
+            return {linkToken: createTokenResponse.data};
         } catch (error) {
             logger.error("Error in creating link token:", error);
         }
@@ -129,6 +121,7 @@ exports.accountBalGet = onCall(
     }
   }
 
+<<<<<<< HEAD
 )
 exports.transactionsGet = onCall (
 
@@ -166,6 +159,36 @@ exports.getCategories = onCall(
     }
   }
 )
+=======
+exports.saveAccessToken = onCall(
+    {
+        enforceAppCheck: true,
+    },
+    async (request: CallableRequest<any>) => {
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+
+        const userDoc = admin.firestore().collection("users").doc(request.auth.uid);
+        const response = await plaidClient.itemPublicTokenExchange({
+            public_token: request.data.publicToken,
+        });
+
+        try {
+            logger.log("request data public token: ", request.data.publicToken);
+            logger.log("data: ", request.data);
+            await userDoc.set({plaidAccessToken: response.data.access_token}, {merge: true});
+            await userDoc.set({itemID: response.data.item_id}, {merge: true});
+            return {success: "Access token saved"};
+        } catch (error) {
+            logger.error("Error in saving access token:", error);
+            return {error: "Error in saving access token"};
+        }
+    },
+);
+
+>>>>>>> origin
 
 // problem with these functions is that they would timeout rather than actually finish
 // they will log everything in console, but still would timeout instead of finishing execution

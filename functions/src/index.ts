@@ -114,8 +114,10 @@ exports.saveAccessToken = onCall(
         try {
             logger.log("request data public token: ", request.data.publicToken);
             logger.log("data: ", request.data);
-            await userDoc.set({plaidAccessToken: response.data.access_token}, {merge: true});
-            await userDoc.set({itemID: response.data.item_id}, {merge: true});
+            await userDoc.set({
+                plaidAccessToken: response.data.access_token,
+                itemID: response.data.item_id,
+            }, {merge: true});
             return {success: "Access token saved"};
         } catch (error) {
             logger.error("Error in saving access token:", error);

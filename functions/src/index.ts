@@ -7,15 +7,17 @@
  * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 import * as functions from "firebase-functions";
-import {CallableRequest, onCall, onRequest} from "firebase-functions/v2/https";
+import {CallableRequest, onCall} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import {Timestamp} from "firebase-admin/firestore";
 
 // https://github.com/firebase/firebase-admin-node/discussions/1959#discussioncomment-3985176
 import {
+    AccountsGetRequest,
     Configuration,
     CountryCode,
+    IdentityGetRequest,
     InstitutionsGetByIdRequest,
     InstitutionsGetRequest,
     InstitutionsSearchRequest,
@@ -23,6 +25,8 @@ import {
     PlaidApi,
     PlaidEnvironments,
     Products,
+    TransactionsGetRequest,
+    TransactionsSyncRequest,
 } from "plaid";
 
 const configuration = new Configuration({
@@ -35,7 +39,6 @@ const configuration = new Configuration({
     },
 });
 const plaidClient = new PlaidApi(configuration);
-
 admin.initializeApp();
 
 // nifty little function that creates a user document for when someone signs up
@@ -81,7 +84,7 @@ exports.createNewLinkToken = onCall(
                 client_user_id: userID,
             },
             client_name: "FiFi",
-            products: [Products.Auth],
+            products: [Products.Auth, Products.Transactions, Products.Identity],
             language: "en",
             country_codes: [CountryCode.Us],
         };
@@ -94,6 +97,164 @@ exports.createNewLinkToken = onCall(
         }
         return {error: "Error in creating link token"};
     },
+);
+// https://plaid.com/docs/api/products/identity/#identityget
+exports.getIdentity = onCall(
+    {
+        enforceAppCheck: false,
+    },
+    async (request: CallableRequest<any>) => {
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+        const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const accessToken = userDoc.data()?.plaidAccessToken;
+        if (accessToken == null) {
+            logger.error("invalid plaidAccessToken");
+            return {error: "invalid plaidAccessToken"};
+        }
+        try {
+            const procRequest: IdentityGetRequest = {
+                access_token: accessToken,
+            };
+            const response = await plaidClient.identityGet(procRequest);
+            const identities = response.data.accounts.flatMap(
+                (account) => account.owners,
+            );
+            logger.log(identities);
+            return {identities: identities};
+        } catch (error) {
+            return {error: error};
+        }
+    }
+);
+// https://plaid.com/docs/api/products/balance/#accountsbalanceget
+exports.getAccountBal = onCall(
+    {
+        enforceAppCheck: false,
+    },
+    async (request: CallableRequest<any>) => {
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+        const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const accessToken = userDoc.data()?.plaidAccessToken;
+        if (accessToken == null) {
+            logger.error("invalid plaidAccessToken");
+            return {error: "invalid plaidAccessToken"};
+        }
+        try {
+            const procRequest: AccountsGetRequest = {
+                access_token: accessToken,
+            };
+            const response = await plaidClient.accountsBalanceGet(procRequest);
+            const accounts = response.data.accounts;
+            logger.log(accounts);
+            return {accounts: accounts};
+        } catch (error) {
+            return {error: error};
+        }
+    }
+);
+
+// https://plaid.com/docs/api/products/transactions/#transactionsget
+exports.getTransactions = onCall(
+    {
+        enforceAppCheck: false,
+    },
+    async (request) => {
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+        const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const accessToken = userDoc.data()?.plaidAccessToken;
+        if (accessToken == null) {
+            logger.error("invalid plaidAccessToken");
+            return {error: "invalid plaidAccessToken"};
+        }
+        const procRequest: TransactionsGetRequest = {
+            access_token: accessToken,
+            start_date: "2018-01-01", // will figure out how request will take them later
+            end_date: "2020-02-01",
+        };
+        try {
+            const response = await plaidClient.transactionsGet(procRequest);
+            const transactions = response.data.transactions;
+            // const total_transactions = response.data.total_transactions;
+            return {transactions: transactions};
+        } catch (error) {
+            return {error: error};
+        }
+    }
+);
+// a better version of the above call, but I'm still comprehending it
+exports.syncTransactions = onCall(
+    {
+        enforceAppCheck: false,
+    },
+    async (request) => {
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+        const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const accessToken = userDoc.data()?.plaidAccessToken;
+        if (accessToken == null) {
+            logger.error("invalid plaidAccessToken");
+            return {error: "invalid plaidAccessToken"};
+        }
+        try {
+            // will see how I can implement this with our database
+            /*
+            let cursor = database.getLatestCursorOrNull(itemId);
+            let added: Array<Transaction> = [];
+            let modified: Array<Transaction> = [];
+            let removed: Array<RemovedTransaction> = [];
+            let hasMore = true;
+            while (hasMore) {
+            const request: TransactionsSyncRequest = {
+                access_token: accessToken,
+                cursor: cursor,
+            };
+            const response = await client.transactionsSync(request);
+            const data = response.data;
+            // Add this page of results
+            added = added.concat(data.added);
+            modified = modified.concat(data.modified);
+            removed = removed.concat(data.removed);
+            hasMore = data.has_more;
+            // Update cursor to the next cursor
+            cursor = data.next_cursor;
+            }
+            // Persist cursor and updated data
+            database.applyUpdates(itemId, added, modified, removed, cursor);*/
+            const procRequest: TransactionsSyncRequest = {
+                access_token: accessToken,
+            };
+            const response = await plaidClient.transactionsSync(procRequest);
+            const data = response.data;
+            return {data: data};
+        } catch (error) {
+            return {error: error};
+        }
+    }
+);
+// https://plaid.com/docs/api/products/transactions/#categoriesget
+exports.getCategories = onCall(
+    {
+        enforceAppCheck: false,
+    },
+    async (request) => {
+        try {
+            const response = await plaidClient.categoriesGet({});
+            return response.data.categories;
+        } catch (error) {
+            return error;
+        }
+    }
 );
 
 exports.saveAccessToken = onCall(
@@ -126,16 +287,16 @@ exports.saveAccessToken = onCall(
     },
 );
 
+// these are test/debug functions
+// will implement properly if found use for it
 
-// problem with these functions is that they would timeout rather than actually finish
-// they will log everything in console, but still would timeout instead of finishing execution
 // https://plaid.com/docs/api/institutions/#institutionsget
-exports.insitutionGet = onRequest(
+exports.institutionGet = onCall(
     {
         // Reject requests with missing or invalid App Check tokens.
-        enforceAppCheck: true,
+        enforceAppCheck: false,
     },
-    async (request, response) => {
+    async (request) => {
         const procRequest: InstitutionsGetRequest = {
             count: 1, // request.query.count
             offset: 0, // request.query.offset
@@ -146,8 +307,9 @@ exports.insitutionGet = onRequest(
             const institutions = response.data.institutions;
             // need to figure out how to send proper response
             logger.log(institutions);
+            return institutions;
         } catch (error) {
-            response.send("Error in getting institutions");
+            return error;
         }
     },
 );
@@ -155,7 +317,7 @@ exports.insitutionGet = onRequest(
 exports.institutionGetById = onCall(
     {
         // Reject requests with missing or invalid App Check tokens.
-        enforceAppCheck: true,
+        enforceAppCheck: false,
     },
     async (request) => {
         const procRequest: InstitutionsGetByIdRequest = {
@@ -169,17 +331,17 @@ exports.institutionGetById = onCall(
             logger.info(institution);
             return {institution: institution};
         } catch (error) {
-            return {error: "Error in getting institution"};
+            return {error: error};
         }
     },
 );
 // https://plaid.com/docs/api/institutions/#institutionssearch
-exports.institutionsSearch = onRequest(
+exports.institutionsSearch = onCall(
     {
         // Reject requests with missing or invalid App Check tokens.
         enforceAppCheck: true,
     },
-    async (request, response) => {
+    async (request) => {
         const procRequest: InstitutionsSearchRequest = {
             query: "ins_118923",
             products: [Products.Transactions],
@@ -190,8 +352,9 @@ exports.institutionsSearch = onRequest(
             const institution = response.data.institutions;
             // need to figure out how to send proper response
             logger.info(institution);
+            return institution;
         } catch (error) {
-            response.send("Error in getting institution");
+            return error;
         }
     },
 );

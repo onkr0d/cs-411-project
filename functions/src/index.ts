@@ -98,12 +98,12 @@ exports.createNewLinkToken = onCall(
         return {error: "Error in creating link token"};
     },
 );
-//https://plaid.com/docs/api/products/identity/#identityget
-exports.identityGet = onCall(
+// https://plaid.com/docs/api/products/identity/#identityget
+exports.getIdentity = onCall(
     {
         enforceAppCheck: false,
     },
-    async(request: CallableRequest<any>) => {
+    async (request: CallableRequest<any>) => {
         if (!request.auth || !request.auth.uid) {
             logger.error("Error in getting auth uid");
             return {error: "Error in getting auth uid"};
@@ -115,147 +115,147 @@ exports.identityGet = onCall(
             return {error: "invalid plaidAccessToken"};
         }
         try {
-            const procRequest: IdentityGetRequest  = {
+            const procRequest: IdentityGetRequest = {
                 access_token: accessToken,
             };
             const response = await plaidClient.identityGet(procRequest);
             const identities = response.data.accounts.flatMap(
-              (account) => account.owners,
+                (account) => account.owners,
             );
-          logger.log(identities);
-          return {identities: identities};
+            logger.log(identities);
+            return {identities: identities};
         } catch (error) {
-          return {error: error};
+            return {error: error};
         }
     }
 );
-//https://plaid.com/docs/api/products/balance/#accountsbalanceget
-exports.accountBalGet = onCall(
-  {
-    enforceAppCheck: false,
-  },
-  async(request: CallableRequest<any>) => {
-    if (!request.auth || !request.auth.uid) {
-        logger.error("Error in getting auth uid");
-        return {error: "Error in getting auth uid"};
+// https://plaid.com/docs/api/products/balance/#accountsbalanceget
+exports.getAccountBal = onCall(
+    {
+        enforceAppCheck: false,
+    },
+    async (request: CallableRequest<any>) => {
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+        const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const accessToken = userDoc.data()?.plaidAccessToken;
+        if (accessToken == null) {
+            logger.error("invalid plaidAccessToken");
+            return {error: "invalid plaidAccessToken"};
+        }
+        try {
+            const procRequest: AccountsGetRequest = {
+                access_token: accessToken,
+            };
+            const response = await plaidClient.accountsBalanceGet(procRequest);
+            const accounts = response.data.accounts;
+            logger.log(accounts);
+            return {accounts: accounts};
+        } catch (error) {
+            return {error: error};
+        }
     }
-    const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
-    const accessToken = userDoc.data()?.plaidAccessToken;
-    if (accessToken == null) {
-        logger.error("invalid plaidAccessToken");
-        return {error: "invalid plaidAccessToken"};
-    }
-    try {
-        const procRequest: AccountsGetRequest = {
-            access_token: accessToken,
-        };
-      const response = await plaidClient.accountsBalanceGet(procRequest);
-      const accounts = response.data.accounts;
-      logger.log(accounts);
-      return {accounts: accounts};
-    } catch (error) {
-      return {error: error};
-    }
-  }
 );
 
-//https://plaid.com/docs/api/products/transactions/#transactionsget
-exports.transactionsGet = onCall (
-  {
-    enforceAppCheck: false,
-  },
-  async(request) => {
-    if (!request.auth || !request.auth.uid) {
-        logger.error("Error in getting auth uid");
-        return {error: "Error in getting auth uid"};
-    }
-    const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
-    const accessToken = userDoc.data()?.plaidAccessToken;
-    if (accessToken == null) {
-        logger.error("invalid plaidAccessToken");
-        return {error: "invalid plaidAccessToken"};
-    }
-    const procRequest: TransactionsGetRequest = {
-      access_token: accessToken,
-      start_date: '2018-01-01', // will figure out how request will take them later
-      end_date: '2020-02-01'
-    };
-    try {
-      const response = await plaidClient.transactionsGet(procRequest);
-      let transactions = response.data.transactions;
-      //const total_transactions = response.data.total_transactions;
-      return {transactions: transactions};
-    } catch (error) {
-      return {error: error};
-    }
-  }
-);
-//a better version of the above call, but I'm still comprehending it
-exports.transactionsSync = onCall (
+// https://plaid.com/docs/api/products/transactions/#transactionsget
+exports.getTransactions = onCall(
     {
-      enforceAppCheck: false,
-    },
-    async(request) => {
-      if (!request.auth || !request.auth.uid) {
-          logger.error("Error in getting auth uid");
-          return {error: "Error in getting auth uid"};
-      }
-      const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
-      const accessToken = userDoc.data()?.plaidAccessToken;
-      if (accessToken == null) {
-          logger.error("invalid plaidAccessToken");
-          return {error: "invalid plaidAccessToken"};
-      }
-      try {
-        // will see how I can implement this with our database
-        /*let cursor = database.getLatestCursorOrNull(itemId);
-        let added: Array<Transaction> = [];
-        let modified: Array<Transaction> = [];
-        let removed: Array<RemovedTransaction> = [];
-        let hasMore = true;
-        while (hasMore) {
-        const request: TransactionsSyncRequest = {
-            access_token: accessToken,
-            cursor: cursor,
-        };
-        const response = await client.transactionsSync(request);
-        const data = response.data;
-        // Add this page of results
-        added = added.concat(data.added);
-        modified = modified.concat(data.modified);
-        removed = removed.concat(data.removed);
-        hasMore = data.has_more;
-        // Update cursor to the next cursor
-        cursor = data.next_cursor;
-        }
-        // Persist cursor and updated data
-        database.applyUpdates(itemId, added, modified, removed, cursor);*/
-        const procRequest: TransactionsSyncRequest = {
-            access_token: accessToken,
-        };
-        const response = await plaidClient.transactionsSync(procRequest);
-        const data = response.data;
-        return{data: data};
-      } catch (error) {
-        return {error: error};
-      }
-    }
-  );
-//https://plaid.com/docs/api/products/transactions/#categoriesget 
-exports.getCategories = onCall(
-    {
-      enforceAppCheck: false,
+        enforceAppCheck: false,
     },
     async (request) => {
-      try {
-        const response = await plaidClient.categoriesGet({});
-        const categories = response.data.categories;
-        return categories;
-      } catch (error) {
-        return error;
-      }
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+        const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const accessToken = userDoc.data()?.plaidAccessToken;
+        if (accessToken == null) {
+            logger.error("invalid plaidAccessToken");
+            return {error: "invalid plaidAccessToken"};
+        }
+        const procRequest: TransactionsGetRequest = {
+            access_token: accessToken,
+            start_date: "2018-01-01", // will figure out how request will take them later
+            end_date: "2020-02-01",
+        };
+        try {
+            const response = await plaidClient.transactionsGet(procRequest);
+            const transactions = response.data.transactions;
+            // const total_transactions = response.data.total_transactions;
+            return {transactions: transactions};
+        } catch (error) {
+            return {error: error};
+        }
     }
-  );
+);
+// a better version of the above call, but I'm still comprehending it
+exports.syncTransactions = onCall(
+    {
+        enforceAppCheck: false,
+    },
+    async (request) => {
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+        const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const accessToken = userDoc.data()?.plaidAccessToken;
+        if (accessToken == null) {
+            logger.error("invalid plaidAccessToken");
+            return {error: "invalid plaidAccessToken"};
+        }
+        try {
+            // will see how I can implement this with our database
+            /*
+            let cursor = database.getLatestCursorOrNull(itemId);
+            let added: Array<Transaction> = [];
+            let modified: Array<Transaction> = [];
+            let removed: Array<RemovedTransaction> = [];
+            let hasMore = true;
+            while (hasMore) {
+            const request: TransactionsSyncRequest = {
+                access_token: accessToken,
+                cursor: cursor,
+            };
+            const response = await client.transactionsSync(request);
+            const data = response.data;
+            // Add this page of results
+            added = added.concat(data.added);
+            modified = modified.concat(data.modified);
+            removed = removed.concat(data.removed);
+            hasMore = data.has_more;
+            // Update cursor to the next cursor
+            cursor = data.next_cursor;
+            }
+            // Persist cursor and updated data
+            database.applyUpdates(itemId, added, modified, removed, cursor);*/
+            const procRequest: TransactionsSyncRequest = {
+                access_token: accessToken,
+            };
+            const response = await plaidClient.transactionsSync(procRequest);
+            const data = response.data;
+            return {data: data};
+        } catch (error) {
+            return {error: error};
+        }
+    }
+);
+// https://plaid.com/docs/api/products/transactions/#categoriesget
+exports.getCategories = onCall(
+    {
+        enforceAppCheck: false,
+    },
+    async (request) => {
+        try {
+            const response = await plaidClient.categoriesGet({});
+            return response.data.categories;
+        } catch (error) {
+            return error;
+        }
+    }
+);
 
 exports.saveAccessToken = onCall(
     {
@@ -354,7 +354,7 @@ exports.institutionsSearch = onCall(
             logger.info(institution);
             return institution;
         } catch (error) {
-          return error;
+            return error;
         }
     },
 );

@@ -85,7 +85,7 @@ export default function Home() {
                     user ? (
                         <LinkComponent/>
                     ) : (
-                        <SignIn/>
+                        <SignIn auth={getAuth()}/>
                     )
                 ) : (
                     <span className="loading loading-ring loading-lg"></span>

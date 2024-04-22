@@ -17,6 +17,7 @@ import {
     AccountsGetRequest,
     Configuration,
     CountryCode,
+    IdentityGetRequest,
     InstitutionsGetByIdRequest,
     InstitutionsGetRequest,
     InstitutionsSearchRequest,
@@ -25,6 +26,7 @@ import {
     PlaidEnvironments,
     Products,
     TransactionsGetRequest,
+    TransactionsSyncRequest,
 } from "plaid";
 
 const configuration = new Configuration({
@@ -82,7 +84,7 @@ exports.createNewLinkToken = onCall(
                 client_user_id: userID,
             },
             client_name: "FiFi",
-            products: [Products.Auth],
+            products: [Products.Auth, Products.Transactions, Products.Identity],
             language: "en",
             country_codes: [CountryCode.Us],
         };
@@ -96,8 +98,38 @@ exports.createNewLinkToken = onCall(
         return {error: "Error in creating link token"};
     },
 );
-// still need to figure out how to get access token
-/*
+//https://plaid.com/docs/api/products/identity/#identityget
+exports.identityGet = onCall(
+    {
+        enforceAppCheck: false,
+    },
+    async(request: CallableRequest<any>) => {
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+        const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const accessToken = userDoc.data()?.plaidAccessToken;
+        if (accessToken == null) {
+            logger.error("invalid plaidAccessToken");
+            return {error: "invalid plaidAccessToken"};
+        }
+        try {
+            const procRequest: IdentityGetRequest  = {
+                access_token: accessToken,
+            };
+            const response = await plaidClient.identityGet(procRequest);
+            const identities = response.data.accounts.flatMap(
+              (account) => account.owners,
+            );
+          logger.log(identities);
+          return {identities: identities};
+        } catch (error) {
+          return {error: error};
+        }
+    }
+);
+//https://plaid.com/docs/api/products/balance/#accountsbalanceget
 exports.accountBalGet = onCall(
   {
     enforceAppCheck: false,
@@ -108,9 +140,14 @@ exports.accountBalGet = onCall(
         return {error: "Error in getting auth uid"};
     }
     const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+    const accessToken = userDoc.data()?.plaidAccessToken;
+    if (accessToken == null) {
+        logger.error("invalid plaidAccessToken");
+        return {error: "invalid plaidAccessToken"};
+    }
     try {
         const procRequest: AccountsGetRequest = {
-            accessToken: userDoc.data()?.access_token?,
+            access_token: accessToken,
         };
       const response = await plaidClient.accountsBalanceGet(procRequest);
       const accounts = response.data.accounts;
@@ -120,17 +157,27 @@ exports.accountBalGet = onCall(
       return {error: error};
     }
   }
+);
 
-)
+//https://plaid.com/docs/api/products/transactions/#transactionsget
 exports.transactionsGet = onCall (
-
   {
     enforceAppCheck: false,
   },
   async(request) => {
+    if (!request.auth || !request.auth.uid) {
+        logger.error("Error in getting auth uid");
+        return {error: "Error in getting auth uid"};
+    }
+    const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+    const accessToken = userDoc.data()?.plaidAccessToken;
+    if (accessToken == null) {
+        logger.error("invalid plaidAccessToken");
+        return {error: "invalid plaidAccessToken"};
+    }
     const procRequest: TransactionsGetRequest = {
       access_token: accessToken,
-      start_date: '2018-01-01',
+      start_date: '2018-01-01', // will figure out how request will take them later
       end_date: '2020-02-01'
     };
     try {
@@ -142,8 +189,59 @@ exports.transactionsGet = onCall (
       return {error: error};
     }
   }
-)
-*/
+);
+//a better version of the above call, but I'm still comprehending it
+exports.transactionsSync = onCall (
+    {
+      enforceAppCheck: false,
+    },
+    async(request) => {
+      if (!request.auth || !request.auth.uid) {
+          logger.error("Error in getting auth uid");
+          return {error: "Error in getting auth uid"};
+      }
+      const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+      const accessToken = userDoc.data()?.plaidAccessToken;
+      if (accessToken == null) {
+          logger.error("invalid plaidAccessToken");
+          return {error: "invalid plaidAccessToken"};
+      }
+      try {
+        // will see how I can implement this with our database
+        /*let cursor = database.getLatestCursorOrNull(itemId);
+        let added: Array<Transaction> = [];
+        let modified: Array<Transaction> = [];
+        let removed: Array<RemovedTransaction> = [];
+        let hasMore = true;
+        while (hasMore) {
+        const request: TransactionsSyncRequest = {
+            access_token: accessToken,
+            cursor: cursor,
+        };
+        const response = await client.transactionsSync(request);
+        const data = response.data;
+        // Add this page of results
+        added = added.concat(data.added);
+        modified = modified.concat(data.modified);
+        removed = removed.concat(data.removed);
+        hasMore = data.has_more;
+        // Update cursor to the next cursor
+        cursor = data.next_cursor;
+        }
+        // Persist cursor and updated data
+        database.applyUpdates(itemId, added, modified, removed, cursor);*/
+        const procRequest: TransactionsSyncRequest = {
+            access_token: accessToken,
+        };
+        const response = await plaidClient.transactionsSync(procRequest);
+        const data = response.data;
+        return{data: data};
+      } catch (error) {
+        return {error: error};
+      }
+    }
+  );
+//https://plaid.com/docs/api/products/transactions/#categoriesget 
 exports.getCategories = onCall(
     {
       enforceAppCheck: false,
@@ -157,7 +255,7 @@ exports.getCategories = onCall(
         return error;
       }
     }
-  )
+  );
 
 exports.saveAccessToken = onCall(
     {
@@ -189,9 +287,9 @@ exports.saveAccessToken = onCall(
     },
 );
 
+// these are test/debug functions
+// will implement properly if found use for it
 
-// problem with these functions is that they would timeout rather than actually finish
-// they will log everything in console, but still would timeout instead of finishing execution
 // https://plaid.com/docs/api/institutions/#institutionsget
 exports.institutionGet = onCall(
     {

@@ -177,11 +177,11 @@ exports.getTransactions = onCall(
             logger.error("invalid plaidAccessToken");
             return {error: "invalid plaidAccessToken"};
         }
-        let date = new Date();
-        let day = date.getDate();
-        let month = date.getMonth()+1;
-        let year = date.getFullYear();
-        let prevDay = day; // might do something with this if I have time for edge cases
+        const date = new Date();
+        const day = date.getDate();
+        const month = date.getMonth()+1;
+        const year = date.getFullYear();
+        const prevDay = day; // might do something with this if I have time for edge cases
         let prevMonth = month-1;
         let prevYear = year;
         if (prevMonth == 0) {
@@ -190,7 +190,7 @@ exports.getTransactions = onCall(
         }
         const procRequest: TransactionsGetRequest = {
             access_token: accessToken,
-            start_date: `${prevYear}-${prevMonth}-${prevDay}`, 
+            start_date: `${prevYear}-${prevMonth}-${prevDay}`,
             end_date: `${year}-${month}-${day}`,
         };
         try {
@@ -301,7 +301,7 @@ exports.saveAccessToken = onCall(
 );
 // openAI gpt call
 const openai = new OpenAI({
-    apiKey: process.env.GPT_KEY
+    apiKey: process.env.GPT_KEY,
 });
 /* This is the "assumed structure of the request
 request: {
@@ -325,39 +325,43 @@ exports.getAIResp = onCall(
             return {error: "Error in getting auth uid"};
         }
         try {
-            const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
-            let apiLimit = userDoc.data()?.apiCallLimit;
+            const userDoc = admin.firestore().collection("users").doc(request.auth.uid);
+            const getUserDoc = await userDoc.get();
+            const apiLimit = getUserDoc.data()?.apiCallLimit;
+            // could check if the apicall limit can be rest here
             if (apiLimit == 0) {
                 return {denied: "AI call limit reached for today, please try again later"};
             } else {
-                const accessToken = userDoc.data()?.plaidAccessToken;
-                let message = request.data.userMessage
-                for (let i in request.data.endpoints) {
+                const accessToken = getUserDoc.data()?.plaidAccessToken;
+                let message = request.data.userMessage;
+                for (const i in request.data.endpoints) {
                     if (request.data.endpoints[i]) {
-                        let endpointResp = await fetch( `https://${i}-kwr6ougmvq-uc.a.run.app`,{
-                            method: 'POST',
+                        const endpointResp = await fetch( `https://${i}-kwr6ougmvq-uc.a.run.app`, {
+                            method: "POST",
                             headers: {
-                                'Content-Type': 'application/json',
+                                "Content-Type": "application/json",
                             },
-                            body: JSON.stringify({ accessToken }),
+                            body: JSON.stringify({accessToken}),
                         });
                         // will DEFINITELY need to trim down the size of the responses
                         message += JSON.stringify(endpointResp);
                     }
                 }
-                //might need to include a system msg, aka just make another message with a role of system
+                // might need to include a system msg, aka just make another message with a role of system
                 const chatResp = await openai.chat.completions.create({
-                    messages: [{ role: 'user', content: message }],
-                    model: 'gpt-3.5-turbo',
-                  });
+                    messages: [{role: "user", content: message}],
+                    model: "gpt-3.5-turbo",
+                });
+                await userDoc.set({
+                    apiCallLimit: apiLimit-1,
+                }, {merge: true});
                 return chatResp.choices[0].message.content;
             }
-            
         } catch (error) {
             return {error: "Error in gpt request"};
         }
     }
-)
+);
 // these are test/debug functions
 // will implement properly if found use for it
 

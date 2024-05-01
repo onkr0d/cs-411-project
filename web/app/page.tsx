@@ -85,7 +85,22 @@ export default function Home() {
                     user ? (
                         <LinkComponent/>
                     ) : (
-                        <SignIn auth={getAuth()}/>
+                        <div>
+                            <div className="h-[10vh] sm:h-[15vh] flex flex-col justify-between items-center">
+                                <h1 className="text-2xl sm:text-4xl">Welcome to{" "}
+                                    <span
+                                        className="text-2xl sm:text-4xl font-extrabold bg-clip-text text-transparent bg-[linear-gradient(to_right,theme(colors.green.300),theme(colors.green.100),theme(colors.sky.400),theme(colors.yellow.200),theme(colors.sky.400),theme(colors.green.100),theme(colors.green.300))] bg-[length:200%_auto] animate-gradient">FiFi</span>
+                                    <span className="text-2xl sm:text-4xl">!</span>
+                                </h1>
+                                <p className="text-sm sm:text-xl text-center">Log in to get started w/quick + easy
+                                    financial advice:</p>
+                            </div>
+                            <div className="w-full">
+                                <div className="w-full sm:w-1/2 mx-auto">
+                                    <SignIn auth={getAuth()}/>
+                                </div>
+                            </div>
+                        </div>
                     )
                 ) : (
                     <span className="loading loading-ring loading-lg"></span>

@@ -287,6 +287,24 @@ exports.saveAccessToken = onCall(
     },
 );
 
+exports.hasToken = onCall(
+    {
+        enforceAppCheck: true,
+    },
+    async (request: CallableRequest<any>) => {
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+        const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const accessToken = userDoc.data()?.plaidAccessToken;
+        if (accessToken == null) {
+            return {result: false};
+        }
+        return {result: true};
+    },
+);
+
 // these are test/debug functions
 // will implement properly if found use for it
 
@@ -358,7 +376,3 @@ exports.institutionsSearch = onCall(
         }
     },
 );
-
-// ex: http://127.0.0.1:5001/cs411-63def/us-central1/helloWorld?name=bob&id=1234
-// if u do logger.info(request.query.name); and logger.info(request.query.id);
-// console logs bob for name and 1234 for id

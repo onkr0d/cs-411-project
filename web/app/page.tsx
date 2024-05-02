@@ -10,12 +10,6 @@ import {initializeAppCheck, ReCaptchaEnterpriseProvider} from "firebase/app-chec
 export default function Home() {
     const [user, setUser] = useState<User | null>(null);
     const fifiApp = getFirebaseApp()
-    const [dynamicText, setDynamicText] = useState("");
-    const words = ["Budgeting", "Saving", "Investing"];
-    let wordIndex = 0;
-    let charIndex = 0;
-    let isDeleting = false;
-    let pauseBeforeDelete = false;
 
     const isFirebaseInitialized = () => {
         return getApps().length > 0;
@@ -41,37 +35,7 @@ export default function Home() {
             getAuth().signOut();
         }
     };
-    
-    const typeEffect = () => {
-        const currentWord = words[wordIndex];
-        const currentChar = isDeleting
-          ? currentWord.substring(0, charIndex - 1)
-          : currentWord.substring(0, charIndex + 1);
-    
-        setDynamicText(currentChar);
-    
-        if (!isDeleting && charIndex === currentWord.length) {
-          pauseBeforeDelete = true;
-          setTimeout(() => {
-            isDeleting = true;
-            pauseBeforeDelete = false;
-          }, 900);
-        } else if (isDeleting && charIndex === 0) {
-          isDeleting = false;
-          wordIndex = (wordIndex + 1) % words.length;
-        }
-    
-        charIndex = isDeleting ? charIndex - 1 : charIndex + 1;
-    
-        setTimeout(typeEffect, isDeleting ? 100 : 100);
-      };
-    
-    useEffect(() => {
-        typeEffect();
-    }, []);
-    
-    const textColor = isDeleting ? "#1D232A" : '#7BAE37';
-    
+
     return (
         <div>
             <div className="navbar bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 sticky top-0">
@@ -121,9 +85,6 @@ export default function Home() {
                     user ? (
                         <LinkComponent/>
                     ) : (
-                        <p style={{ fontFamily: 'Cambria', fontSize: '70px', color: '#F2F1F1' }}>Your Smart Financial Advisor</p>
-                        <span style={{ fontFamily: 'Cambria', fontSize: '40px', color: '#F2F1F1' }}>Harness tools for  </span>
-                        <span style={{ fontFamily: 'Cambria', fontSize: '40px', color: textColor }}>{dynamicText}</span>
                         <SignIn auth={getAuth()}/>
                     )
                 ) : (

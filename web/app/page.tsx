@@ -4,16 +4,16 @@ import {getAuth, onAuthStateChanged, User} from "firebase/auth";
 import SignIn from "@/app/components/signin";
 import LinkComponent from "@/app/components/link";
 import {getFirebaseApp} from "@/app/components/firebase/firebaseapp";
-import {getApps} from "firebase/app";
 import {initializeAppCheck, ReCaptchaEnterpriseProvider} from "firebase/app-check";
+import Chat from "@/app/components/chat";
+import {usePersistentState} from "react-persistent-state";
 
 export default function Home() {
     const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const fifiApp = getFirebaseApp()
-
-    const isFirebaseInitialized = () => {
-        return getApps().length > 0;
-    }
+    const [isPlaidFlowDone, setIsPlaidFlowDone] =
+        usePersistentState(false, {storageKey: 'plaidFlowDone'});
 
     useEffect(() => {
         initializeAppCheck(fifiApp, {
@@ -25,16 +25,20 @@ export default function Home() {
 
         const unsubscribe = onAuthStateChanged(getAuth(), (user) => {
             setUser(user);
+            setIsLoading(false)
         });
 
         return () => unsubscribe();
-    }, [fifiApp]);
+    }, [fifiApp, isPlaidFlowDone]);
 
     const handleLogout = () => {
         if (user) {
             getAuth().signOut();
+            setIsPlaidFlowDone(false);
         }
     };
+
+    console.log('plaid flow complete?', isPlaidFlowDone)
 
     return (
         <div>
@@ -81,9 +85,13 @@ export default function Home() {
                 </div>
             </div>
             <div className={"bg-base-100 h-screen grid place-content-center"}>
-                {isFirebaseInitialized() ? (
+                {isLoading ? (
+                    <span className="loading loading-ring loading-lg"></span>
+                ) : (
                     user ? (
-                        <LinkComponent/>
+                        isPlaidFlowDone ?
+                            <Chat/> :
+                            <LinkComponent setIsFlowDone={setIsPlaidFlowDone}/>
                     ) : (
                         <div>
                             <div className="h-[10vh] sm:h-[15vh] flex flex-col justify-between items-center">
@@ -102,8 +110,6 @@ export default function Home() {
                             </div>
                         </div>
                     )
-                ) : (
-                    <span className="loading loading-ring loading-lg"></span>
                 )}
             </div>
         </div>

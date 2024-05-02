@@ -10,6 +10,7 @@ import * as functions from "firebase-functions";
 import {CallableRequest, onCall} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import {firestore} from "firebase-admin";
 import {Timestamp} from "firebase-admin/firestore";
 
 // https://github.com/firebase/firebase-admin-node/discussions/1959#discussioncomment-3985176
@@ -28,6 +29,8 @@ import {
     TransactionsGetRequest,
     TransactionsSyncRequest,
 } from "plaid";
+import DocumentReference = firestore.DocumentReference;
+import DocumentSnapshot = firestore.DocumentSnapshot;
 
 const configuration = new Configuration({
     basePath: PlaidEnvironments.sandbox,
@@ -374,5 +377,43 @@ exports.institutionsSearch = onCall(
         } catch (error) {
             return error;
         }
+    },
+);
+
+exports.chatWithGPT = onCall(
+    {
+        enforceAppCheck: true,
+    },
+    async (request) => {
+        // user who called us:
+        const user = request.auth?.uid;
+        if (!user) {
+            return {error: "User not found"};
+        }
+        console.log(request.data);
+        const path = `users/${user}/messages`;
+        const ref: DocumentReference = await admin
+            .firestore()
+            .collection(path)
+            .add({
+                prompt: request.data.prompt,
+                parentMessageId: request.data.parentMessageId ? request.data.parentMessageId : null,
+            });
+        const snap: DocumentSnapshot = await ref.get();
+        if (snap.get("response")) {
+            console.log(`RESPONSE: ${snap.get("response")}`);
+            return {response: snap.get("response")};
+        } else {
+            return {response: "No response yet"};
+        }
+        // ref.onSnapshot((snap: DocumentSnapshot) => {
+        //     if (snap.get("response")) {
+        //         console.log(`RESPONSE: ${snap.get("response")}`);
+        //         return {response: snap.get("response")};
+        //     } else {
+        //         return {response: "No response yet"};
+        //     }
+        // });
+        // return;
     },
 );

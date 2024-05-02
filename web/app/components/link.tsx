@@ -104,7 +104,7 @@ const Link: React.FC<LinkProps> = (props: LinkProps) => {
     const {open, ready} = usePlaidLink(config);
 
     // get our own user id:
-    const userUid = getAuth().currentUser?.uid;
+    /**const userUid = getAuth().currentUser?.uid;
     const messagesRef = collection(getFirestore(), `users/${userUid}/messages`);
     const unsubscribe = onSnapshot(messagesRef, snapshot => {
         snapshot.docChanges().forEach((change: DocumentChange) => {
@@ -121,7 +121,7 @@ const Link: React.FC<LinkProps> = (props: LinkProps) => {
     }, error => {
         console.error('Error fetching snapshot:', error);
     }, 1000);
-
+**/
     if (props.hasAccessToken) {
         return (
             <div className="flex flex-col">

@@ -11,6 +11,7 @@ import {CallableRequest, onCall} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import {Timestamp} from "firebase-admin/firestore";
+import OpenAI from "openai";
 
 // https://github.com/firebase/firebase-admin-node/discussions/1959#discussioncomment-3985176
 import {
@@ -40,6 +41,7 @@ const configuration = new Configuration({
 });
 const plaidClient = new PlaidApi(configuration);
 admin.initializeApp();
+
 
 // nifty little function that creates a user document for when someone signs up
 export const onUserCreate = functions.auth.user().onCreate(async (user) => {
@@ -175,10 +177,21 @@ exports.getTransactions = onCall(
             logger.error("invalid plaidAccessToken");
             return {error: "invalid plaidAccessToken"};
         }
+        const date = new Date();
+        const day = date.getDate();
+        const month = date.getMonth()+1;
+        const year = date.getFullYear();
+        const prevDay = day; // might do something with this if I have time for edge cases
+        let prevMonth = month-1;
+        let prevYear = year;
+        if (prevMonth == 0) {
+            prevMonth = 12;
+            prevYear -= 1;
+        }
         const procRequest: TransactionsGetRequest = {
             access_token: accessToken,
-            start_date: "2018-01-01", // will figure out how request will take them later
-            end_date: "2020-02-01",
+            start_date: `${prevYear}-${prevMonth}-${prevDay}`,
+            end_date: `${year}-${month}-${day}`,
         };
         try {
             const response = await plaidClient.transactionsGet(procRequest);
@@ -286,7 +299,69 @@ exports.saveAccessToken = onCall(
         }
     },
 );
-
+// openAI gpt call
+const openai = new OpenAI({
+    apiKey: process.env.GPT_KEY,
+});
+/* This is the "assumed structure of the request
+request: {
+    auth: {
+        uid:
+        ...
+    }
+    data: {
+        userMessage: "string"
+        endpoints: {getAccountBal: true/false, getTransactions: true/false...}
+    }
+    ...
+}
+*/
+exports.getAIResp = onCall(
+    {
+        enforceAppCheck: true,
+    },
+    async (request: CallableRequest<any>) => {
+        if (!request.auth || !request.auth.uid) {
+            return {error: "Error in getting auth uid"};
+        }
+        try {
+            const userDoc = admin.firestore().collection("users").doc(request.auth.uid);
+            const getUserDoc = await userDoc.get();
+            const apiLimit = getUserDoc.data()?.apiCallLimit;
+            // could check if the apicall limit can be rest here
+            if (apiLimit == 0) {
+                return {denied: "AI call limit reached for today, please try again later"};
+            } else {
+                const accessToken = getUserDoc.data()?.plaidAccessToken;
+                let message = request.data.userMessage;
+                for (const i in request.data.endpoints) {
+                    if (request.data.endpoints[i]) {
+                        const endpointResp = await fetch( `https://${i}-kwr6ougmvq-uc.a.run.app`, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({accessToken}),
+                        });
+                        // will DEFINITELY need to trim down the size of the responses
+                        message += JSON.stringify(endpointResp);
+                    }
+                }
+                // might need to include a system msg, aka just make another message with a role of system
+                const chatResp = await openai.chat.completions.create({
+                    messages: [{role: "user", content: message}],
+                    model: "gpt-3.5-turbo",
+                });
+                await userDoc.set({
+                    apiCallLimit: apiLimit-1,
+                }, {merge: true});
+                return chatResp.choices[0].message.content;
+            }
+        } catch (error) {
+            return {error: "Error in gpt request"};
+        }
+    }
+);
 // these are test/debug functions
 // will implement properly if found use for it
 

@@ -397,7 +397,7 @@ exports.chatWithGPT = onCall(
             .collection(path)
             .add({
                 prompt: request.data.prompt,
-                parentMessageId: request.data.parentMessageId ? request.data.parentMessageId : null,
+                parentMessageId: request.data.parentMessageId,
             });
 
         ref.onSnapshot((snap: DocumentSnapshot) => {

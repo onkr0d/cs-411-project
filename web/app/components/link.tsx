@@ -38,6 +38,7 @@ const LinkComponent = (props: LinkComponentProps) => {
         hasToken()
             .then((result: any) => {
                 if (result.data) {
+                    console.log("token is:", result.data.result)
                     setHasAccessToken(result.data.result)
                 }
             })

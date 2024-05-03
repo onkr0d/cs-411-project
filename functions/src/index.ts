@@ -399,21 +399,16 @@ exports.chatWithGPT = onCall(
                 prompt: request.data.prompt,
                 parentMessageId: request.data.parentMessageId ? request.data.parentMessageId : null,
             });
-        const snap: DocumentSnapshot = await ref.get();
-        if (snap.get("response")) {
-            console.log(`RESPONSE: ${snap.get("response")}`);
-            return {response: snap.get("response")};
-        } else {
-            return {response: "No response yet"};
-        }
-        // ref.onSnapshot((snap: DocumentSnapshot) => {
-        //     if (snap.get("response")) {
-        //         console.log(`RESPONSE: ${snap.get("response")}`);
-        //         return {response: snap.get("response")};
-        //     } else {
-        //         return {response: "No response yet"};
-        //     }
-        // });
-        // return;
+
+        ref.onSnapshot((snap: DocumentSnapshot) => {
+            if (snap.get("response")) {
+                console.log(`RESPONSE: ${snap.get("response")}`);
+                return {response: snap.get("response")};
+            } else {
+                return {response: "No response yet"};
+            }
+        });
+        return {id: ref.id};
     },
-);
+)
+;

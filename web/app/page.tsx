@@ -5,7 +5,7 @@ import SignIn from "@/app/components/signin";
 import LinkComponent from "@/app/components/link";
 import {getFirebaseApp} from "@/app/components/firebase/firebaseapp";
 import {initializeAppCheck, ReCaptchaEnterpriseProvider} from "firebase/app-check";
-import Chat from "@/app/components/chat";
+import Chat from "@/app/components/chat/chat";
 import {usePersistentState} from "react-persistent-state";
 
 export default function Home() {
@@ -38,11 +38,9 @@ export default function Home() {
         }
     };
 
-    console.log('plaid flow complete?', isPlaidFlowDone)
-
     return (
         <div>
-            <div className="navbar bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 sticky top-0">
+            <div className="navbar bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 sticky top-0 z-10">
                 <div className="flex-1">
                     <a className="btn btn-ghost text-xl">FIFI</a>
                 </div>
@@ -84,7 +82,7 @@ export default function Home() {
                     </div>
                 </div>
             </div>
-            <div className={"bg-base-100 h-screen grid place-content-center"}>
+            <div className="bg-base-100 h-screen w-screen grid place-content-center">
                 {isLoading ? (
                     <span className="loading loading-ring loading-lg"></span>
                 ) : (

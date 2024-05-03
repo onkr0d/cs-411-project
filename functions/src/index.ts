@@ -410,5 +410,56 @@ exports.chatWithGPT = onCall(
         });
         return {id: ref.id};
     },
-)
-;
+);
+
+exports.deleteChat = onCall(
+    {
+        enforceAppCheck: true,
+    },
+    async (request) => {
+        // user who called us:
+        const user = request.auth?.uid;
+        if (!user) {
+            return {error: "User not found"};
+        }
+        const path = `users/${user}/messages`;
+        await deleteCollection(admin.firestore(), path, 10);
+        return {success: "Messages deleted"};
+    },
+);
+
+// eslint-disable-next-line require-jsdoc
+async function deleteCollection(db: firestore.Firestore, collectionPath: string, batchSize: number) {
+    const collectionRef = db.collection(collectionPath);
+    const query = collectionRef.orderBy("__name__").limit(batchSize);
+
+    return new Promise((resolve, reject) => {
+        deleteQueryBatch(db, query, resolve).catch(reject);
+    });
+}
+
+// eslint-disable-next-line require-jsdoc
+async function deleteQueryBatch(db: firestore.Firestore, query: firestore.Query<firestore.DocumentData,
+    firestore.DocumentData>, resolve: any) {
+    const snapshot = await query.get();
+
+    const batchSize = snapshot.size;
+    if (batchSize === 0) {
+        // When there are no documents left, we are done
+        resolve();
+        return;
+    }
+
+    // Delete documents in a batch
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+    });
+    await batch.commit();
+
+    // Recurse on the next process tick, to avoid
+    // exploding the stack.
+    process.nextTick(() => {
+        deleteQueryBatch(db, query, resolve);
+    });
+}

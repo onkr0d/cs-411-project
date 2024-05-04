@@ -86,7 +86,7 @@ export default function Home() {
                             className="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52"
                         >
                             <li className="">
-                                <a>User: {user?.displayName}</a>
+                                <a>{user?.displayName}</a>
                             </li>
                             <li className="py-2">
                                 <a className="hover:bg-orange-400" onClick={() => handleLogout()}>Logout</a>

@@ -1,19 +1,21 @@
-# Setting up and launching the project:  
-Note that this is for a windows setup. It might differ slightly for mac users.  
-## The basic stuff:  
-Clone the repository  
-Once the repository is cloned, install the necessary libraries for the web and functions folders through the usage of npm install.  
-Install Bun, which will be used for emualting and testing. Link: https://bun.sh/docs/installation.  
-  
-## Firebase:  
-Install firebase and firebase-tools using npm install -g <library_name>.  
-Run firebase login to login with the account used for your Firebase project.  
-Run firebase projects:list to confirm that the firebase project is there.  
-Make sure to include all environment variables in .env files in both web and functions folders.  
-  
-## Launch:  
-Firebase provides commands that can be used to see if what the project would like when launched.  
-In order to test only the firebase functions, run bun lint --fix to fix the code, and the bun run build.  
-For the full emulator experience, run firebase emulators:start in the web folder.  
-  
+# 🌟 Setting up and launching the project:
 
+## The basic stuff:
+- Clone the repository
+- Install [Firebase CLI](https://github.com/firebase/firebase-tools?tab=readme-ov-file#installation)
+- Install [Bun.js](https://bun.sh/docs/installation) <img src="https://github.com/onkr0d/cs-411-project/assets/90716666/02c693bc-f3f2-4710-86df-0452cef12ca1" width="10"/>, which is used in place of npm (because it's way faster)
+
+## Firebase:
+- Install ``firebase`` and ``firebase-tools`` using ``npm install -g <library_name>``.
+- Run ``firebase login`` to log in to your Firebase account.
+- Create a new project in the [Firebase Console](https://console.firebase.google.com/).
+- Set up all necessary services (Firestore, Functions, Hosting, Auth, AppCheck) on the Firebase Console.
+- Make sure you populate all ``.example.env`` files with the legitimate credentials 🔑
+
+## Launch locally:
+- Firebase provides an emulator suite, but support for our tooling (Next.js) is experimental ⚠️:
+    - We must run the emulator from the ``web/`` folder
+    - We must run ``bun lint --fix && bun run build`` in the ``functions/`` folder to build and update the functions
+- To run the emulator, run ``firebase emulators:start`` in ``web/``.
+
+Enjoy! 🚀

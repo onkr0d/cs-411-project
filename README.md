@@ -4,11 +4,12 @@
 - Clone the repository
 - Install [Firebase CLI](https://github.com/firebase/firebase-tools?tab=readme-ov-file#installation)
 - Install [Bun.js](https://bun.sh/docs/installation) <img src="https://github.com/onkr0d/cs-411-project/assets/90716666/02c693bc-f3f2-4710-86df-0452cef12ca1" width="10"/>, which is used in place of npm (because it's way faster)
-- Install the required dependencies with ``npm install`` in the ``web/`` and ``functions/`` folder. You should be able to ignore the other ``npm install <library>`` mentioned below, but those are provided just in case.
+- Install the required dependencies with ``npm install`` in the ``web/`` and ``functions/`` folder.
+- You should be able to ignore the other ``npm install <library>`` mentioned below, but those are provided just in case.
   
 ## Plaid && ChatGPT  
-- Install openai API with ``npm install --save openai``. 
-- Get API keys from your OpenAI Project, which can be created [here.](https://platform.openai.com/overviewh)
+- Install openai API with ``npm install --save openai``.
+- Get API keys from your OpenAI Project, which can be created [here.](https://platform.openai.com/overview)
 - Install Plaid API with ``npm install plaid``.
 - Get API keys from your Plaid Project, which can be created [here.](https://plaid.com/docs/)
   

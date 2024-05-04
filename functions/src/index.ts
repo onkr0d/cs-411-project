@@ -62,6 +62,7 @@ export const onUserCreate = functions.auth.user().onCreate(async (user) => {
                 limitResetsAt: timeStamp,
                 plaidAccessToken: null,
                 itemID: null,
+                transactions: null,
             },
             {merge: true},
         );
@@ -104,7 +105,7 @@ exports.createNewLinkToken = onCall(
 // https://plaid.com/docs/api/products/identity/#identityget
 exports.getIdentity = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request: CallableRequest<any>) => {
         if (!request.auth || !request.auth.uid) {
@@ -135,7 +136,7 @@ exports.getIdentity = onCall(
 // https://plaid.com/docs/api/products/balance/#accountsbalanceget
 exports.getAccountBal = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request: CallableRequest<any>) => {
         if (!request.auth || !request.auth.uid) {
@@ -165,7 +166,7 @@ exports.getAccountBal = onCall(
 // https://plaid.com/docs/api/products/transactions/#transactionsget
 exports.getTransactions = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request) => {
         if (!request.auth || !request.auth.uid) {
@@ -181,7 +182,7 @@ exports.getTransactions = onCall(
         const procRequest: TransactionsGetRequest = {
             access_token: accessToken,
             start_date: "2018-01-01", // will figure out how request will take them later
-            end_date: "2020-02-01",
+            end_date: "2018-02-01",
         };
         try {
             const response = await plaidClient.transactionsGet(procRequest);
@@ -196,7 +197,7 @@ exports.getTransactions = onCall(
 // a better version of the above call, but I'm still comprehending it
 exports.syncTransactions = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request) => {
         if (!request.auth || !request.auth.uid) {
@@ -248,7 +249,7 @@ exports.syncTransactions = onCall(
 // https://plaid.com/docs/api/products/transactions/#categoriesget
 exports.getCategories = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request) => {
         try {
@@ -282,6 +283,23 @@ exports.saveAccessToken = onCall(
                 plaidAccessToken: response.data.access_token,
                 itemID: response.data.item_id,
             }, {merge: true});
+
+            // Invoke getTransactions function
+            const getTransactionsResult = await getTransactionData(request.auth.uid);
+            logger.warn("setting users transactions!");
+            await admin.firestore().collection("users").doc(request.auth.uid).set(
+                {
+                    transactions: getTransactionsResult.transactions,
+                },
+                {merge: true},
+            );
+
+            if (getTransactionsResult.error) {
+                logger.error("Error in getting transactions:", getTransactionsResult.error);
+                return {error: "Something went wrong, please try again later"};
+            }
+
+            // save this to users/{uid/
             return {success: "Access token saved"};
         } catch (error) {
             logger.error("Error in saving access token:", error);
@@ -315,7 +333,7 @@ exports.hasToken = onCall(
 exports.institutionGet = onCall(
     {
         // Reject requests with missing or invalid App Check tokens.
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request) => {
         const procRequest: InstitutionsGetRequest = {
@@ -338,7 +356,7 @@ exports.institutionGet = onCall(
 exports.institutionGetById = onCall(
     {
         // Reject requests with missing or invalid App Check tokens.
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request) => {
         const procRequest: InstitutionsGetByIdRequest = {
@@ -392,11 +410,37 @@ exports.chatWithGPT = onCall(
         }
         console.log(request.data);
         const path = `users/${user}/messages`;
+
+        // check if the messages collection is empty:
+        const messages = await admin.firestore().collection(path).get();
+        let prompt = request.data.prompt;
+        if (messages.size == 0) {
+            // since this is the first prompt, the bot is missing all transaction context.
+            // let's add that in:
+            // get transactions from firestore:
+            const userDoc = await admin.firestore()
+                .collection("users")
+                .doc(user)
+                .get();
+
+            const transactions = userDoc.data()?.transactions;
+            logger.warn("got user transactions: ", transactions);
+
+            // Convert transactions to a string representation
+            const transactionsString = transactions.map((transaction: any, index: number) => {
+                // eslint-disable-next-line max-len
+                return `[Transaction ${index}; Amount: ${transaction.amount}, Date: ${transaction.date}, Currency: ${transaction.iso_currency_code}, Merchant: ${transaction.merchant_name}, Category: ${transaction.personal_finance_category}, Website: ${transaction.website}]`;
+            }).join("\n");
+
+            // eslint-disable-next-line max-len
+            prompt = `Answer the question based only on the following context: ${transactionsString} Question: _|_${request.data.prompt}`;
+        }
+
         const ref: DocumentReference = await admin
             .firestore()
             .collection(path)
             .add({
-                prompt: request.data.prompt,
+                prompt: prompt,
                 parentMessageId: request.data.parentMessageId,
             });
 
@@ -462,4 +506,51 @@ async function deleteQueryBatch(db: firestore.Firestore, query: firestore.Query<
     process.nextTick(() => {
         deleteQueryBatch(db, query, resolve);
     });
+}
+
+interface Transaction {
+    amount: number;
+    personal_finance_category?: string;
+    date: string;
+    iso_currency_code: string | null;
+    name: string | null | undefined;
+    website?: string | null;
+}
+
+// eslint-disable-next-line require-jsdoc
+async function getTransactionData(uid: string) {
+    const userDoc = await admin.firestore().collection("users").doc(uid).get();
+    const accessToken = userDoc.data()?.plaidAccessToken;
+    if (accessToken == null) {
+        logger.error("invalid plaidAccessToken");
+        return {error: "invalid plaidAccessToken"};
+    }
+
+    // this will give us a comfortable 17 transactions
+    const transactionsGetRequest: TransactionsGetRequest = {
+        access_token: accessToken,
+        start_date: "2023-04-14",
+        end_date: "2024-04-17",
+    };
+
+    try {
+        const response = await plaidClient.transactionsGet(transactionsGetRequest);
+        const rawTransactions = response.data.transactions;
+        // logger.info("rawTransactions: ", rawTransactions);
+        const filteredTransactions: Transaction[] = [];
+        for (const transaction of rawTransactions) {
+            filteredTransactions.push({
+                amount: transaction.amount,
+                personal_finance_category: transaction.personal_finance_category?.primary,
+                date: transaction.date,
+                iso_currency_code: transaction.iso_currency_code,
+                name: transaction.name,
+                website: transaction.website,
+            });
+        }
+        logger.info("filteredTransactions: ", filteredTransactions);
+        return {transactions: filteredTransactions};
+    } catch (error) {
+        return {error: error};
+    }
 }

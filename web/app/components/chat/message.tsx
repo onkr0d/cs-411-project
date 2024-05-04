@@ -27,10 +27,13 @@ const Message = (props: MessageProps) => {
             <br/>
         </React.Fragment>);
 
+    // Split the prompt at the "_|_" character sequence and get the last part
+    const prompt = props.prompt.split('_|_').pop() || '';
+    console.log("splitting 🔥")
     return (
         <div>
             <div className={"chat chat-end"}>
-                <div className="chat-bubble">{props.prompt}</div>
+                <div className="chat-bubble">{prompt}</div>
             </div>
             <div className={"chat chat-start"}>
                 <div className="chat-bubble">{responseLines}</div>

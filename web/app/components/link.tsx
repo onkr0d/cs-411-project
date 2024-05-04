@@ -1,16 +1,20 @@
 // APP COMPONENT
 // Upon rendering of App component, make a request to create and
 // obtain a link token to be used in the Link component
-import React, {useEffect, useState} from 'react';
+import React, {Dispatch, SetStateAction, useEffect, useState} from 'react';
 import {usePlaidLink} from 'react-plaid-link';
 import {connectFunctionsEmulator, getFunctions, httpsCallable} from "firebase/functions";
 import {getApp} from "firebase/app";
 
-const LinkComponent = () => {
+interface LinkComponentProps {
+    setIsFlowDone: Dispatch<SetStateAction<boolean>>;
+}
+
+const LinkComponent = (props: LinkComponentProps) => {
     const [linkToken, setLinkToken] = useState(null);
+    const [hasAccessToken, setHasAccessToken] = useState(false);
     const generateToken = async () => {
         const functions = getFunctions(getApp());
-        // yeah nice one google - manually use emulator since it doesn't automatically detect it
         if (process.env.NODE_ENV === 'development') {
             connectFunctionsEmulator(functions, 'localhost', 5001);
         }
@@ -23,10 +27,29 @@ const LinkComponent = () => {
                 setLinkToken(result.data.linkToken.link_token);
             })
     };
+    const checkToken = async () => {
+        const functions = getFunctions(getApp());
+        if (process.env.NODE_ENV === 'development') {
+            connectFunctionsEmulator(functions, 'localhost', 5001);
+        }
+        const hasToken = httpsCallable(functions, 'hasToken');
+        hasToken()
+            .then((result: any) => {
+                if (result.data) {
+                    console.log("token is:", result.data.result)
+                    setHasAccessToken(result.data.result)
+                    props.setIsFlowDone(result.data.result)
+                }
+            })
+
+    }
+
     useEffect(() => {
+        checkToken();
         generateToken();
-    }, []);
-    return linkToken != null ? <Link linkToken={linkToken}/> : <></>;
+    }, [props]);
+    return linkToken != null ?
+        <Link linkToken={linkToken} setIsFlowDone={props.setIsFlowDone} hasAccessToken={hasAccessToken}/> : <></>;
 };
 
 // LINK COMPONENT
@@ -34,11 +57,14 @@ const LinkComponent = () => {
 // in configuration to initialize Plaid Link
 interface LinkProps {
     linkToken: string | null;
+    setIsFlowDone: Dispatch<SetStateAction<boolean>>;
+    hasAccessToken: boolean;
 }
 
 const Link: React.FC<LinkProps> = (props: LinkProps) => {
+    const [hide, setHide] = useState(false)
+
     const onSuccess = React.useCallback((publicToken: string, metadata: any) => {
-        // send public_token to server
         const functions = getFunctions(getApp());
         // yeah nice one google - manually use emulator since it doesn't automatically detect it
         if (process.env.NODE_ENV === 'development') {
@@ -51,20 +77,34 @@ const Link: React.FC<LinkProps> = (props: LinkProps) => {
             .then((result: any) => {
                 console.log("Sent public token!")
                 console.log(result.data)
+                props.setIsFlowDone(true);
+                console.log("set public token!")
             })
+    }, [props]);
 
-
-        // Handle response ...
-    }, []);
     const config: Parameters<typeof usePlaidLink>[0] = {
         token: props.linkToken!,
         onSuccess,
+        onExit: () => {
+            setHide(false)
+        }
     };
+
     const {open, ready} = usePlaidLink(config);
+
     return (
-        <button onClick={() => open()} disabled={!ready}>
-            Link account
-        </button>
+        hide ? null : (
+            <button
+                onClick={() => {
+                    open();
+                    setHide(true);
+                }}
+                disabled={!ready}
+                className="btn btn-primary btn-active:bg-blue-600 hover:bg-blue-500"
+            >
+                Link account
+            </button>
+        )
     );
 };
 export default LinkComponent;

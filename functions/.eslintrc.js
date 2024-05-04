@@ -29,5 +29,6 @@ module.exports = {
         "import/no-unresolved": 0,
         "indent": ["error", 4],
         "max-len": ["error", {"code": 120}],
+        "no-trailing-spaces": 0,
     },
 };

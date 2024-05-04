@@ -1,3 +1,31 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.rainbow {
+    --angle: 0deg;
+    --border-width: 2px;
+    --border-gradient: conic-gradient(from var(--angle), red, yellow, lime, aqua, blue, magenta, red);
+    border: var(--border-width) solid transparent;
+    border-image: var(--border-gradient) 1;
+    border-image-slice: 1;
+    animation: 10s rotate linear infinite;
+    @apply rounded-b;
+}
+
+/*go away bro i don't care*/
+.firebase-emulator-warning {
+    display: none;
+}
+
+@keyframes rotate {
+    to {
+        --angle: 360deg;
+    }
+}
+
+@property --angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+}

@@ -10,6 +10,7 @@ import * as functions from "firebase-functions";
 import {CallableRequest, onCall} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import {firestore} from "firebase-admin";
 import {Timestamp} from "firebase-admin/firestore";
 
 // https://github.com/firebase/firebase-admin-node/discussions/1959#discussioncomment-3985176
@@ -28,6 +29,8 @@ import {
     TransactionsGetRequest,
     TransactionsSyncRequest,
 } from "plaid";
+import DocumentReference = firestore.DocumentReference;
+import DocumentSnapshot = firestore.DocumentSnapshot;
 
 const configuration = new Configuration({
     basePath: PlaidEnvironments.sandbox,
@@ -59,6 +62,7 @@ export const onUserCreate = functions.auth.user().onCreate(async (user) => {
                 limitResetsAt: timeStamp,
                 plaidAccessToken: null,
                 itemID: null,
+                transactions: null,
             },
             {merge: true},
         );
@@ -101,7 +105,7 @@ exports.createNewLinkToken = onCall(
 // https://plaid.com/docs/api/products/identity/#identityget
 exports.getIdentity = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request: CallableRequest<any>) => {
         if (!request.auth || !request.auth.uid) {
@@ -132,7 +136,7 @@ exports.getIdentity = onCall(
 // https://plaid.com/docs/api/products/balance/#accountsbalanceget
 exports.getAccountBal = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request: CallableRequest<any>) => {
         if (!request.auth || !request.auth.uid) {
@@ -162,7 +166,7 @@ exports.getAccountBal = onCall(
 // https://plaid.com/docs/api/products/transactions/#transactionsget
 exports.getTransactions = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request) => {
         if (!request.auth || !request.auth.uid) {
@@ -178,7 +182,7 @@ exports.getTransactions = onCall(
         const procRequest: TransactionsGetRequest = {
             access_token: accessToken,
             start_date: "2018-01-01", // will figure out how request will take them later
-            end_date: "2020-02-01",
+            end_date: "2018-02-01",
         };
         try {
             const response = await plaidClient.transactionsGet(procRequest);
@@ -193,7 +197,7 @@ exports.getTransactions = onCall(
 // a better version of the above call, but I'm still comprehending it
 exports.syncTransactions = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request) => {
         if (!request.auth || !request.auth.uid) {
@@ -245,7 +249,7 @@ exports.syncTransactions = onCall(
 // https://plaid.com/docs/api/products/transactions/#categoriesget
 exports.getCategories = onCall(
     {
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request) => {
         try {
@@ -279,11 +283,46 @@ exports.saveAccessToken = onCall(
                 plaidAccessToken: response.data.access_token,
                 itemID: response.data.item_id,
             }, {merge: true});
+
+            // Invoke getTransactions function
+            const getTransactionsResult = await getTransactionData(request.auth.uid);
+            logger.warn("setting users transactions!");
+            await admin.firestore().collection("users").doc(request.auth.uid).set(
+                {
+                    transactions: getTransactionsResult.transactions,
+                },
+                {merge: true},
+            );
+
+            if (getTransactionsResult.error) {
+                logger.error("Error in getting transactions:", getTransactionsResult.error);
+                return {error: "Something went wrong, please try again later"};
+            }
+
+            // save this to users/{uid/
             return {success: "Access token saved"};
         } catch (error) {
             logger.error("Error in saving access token:", error);
             return {error: "Error in saving access token"};
         }
+    },
+);
+
+exports.hasToken = onCall(
+    {
+        enforceAppCheck: true,
+    },
+    async (request: CallableRequest<any>) => {
+        if (!request.auth || !request.auth.uid) {
+            logger.error("Error in getting auth uid");
+            return {error: "Error in getting auth uid"};
+        }
+        const userDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+        const accessToken = userDoc.data()?.plaidAccessToken;
+        if (accessToken == null) {
+            return {result: false};
+        }
+        return {result: true};
     },
 );
 
@@ -294,7 +333,7 @@ exports.saveAccessToken = onCall(
 exports.institutionGet = onCall(
     {
         // Reject requests with missing or invalid App Check tokens.
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request) => {
         const procRequest: InstitutionsGetRequest = {
@@ -317,7 +356,7 @@ exports.institutionGet = onCall(
 exports.institutionGetById = onCall(
     {
         // Reject requests with missing or invalid App Check tokens.
-        enforceAppCheck: false,
+        enforceAppCheck: true,
     },
     async (request) => {
         const procRequest: InstitutionsGetByIdRequest = {
@@ -359,6 +398,159 @@ exports.institutionsSearch = onCall(
     },
 );
 
-// ex: http://127.0.0.1:5001/cs411-63def/us-central1/helloWorld?name=bob&id=1234
-// if u do logger.info(request.query.name); and logger.info(request.query.id);
-// console logs bob for name and 1234 for id
+exports.chatWithGPT = onCall(
+    {
+        enforceAppCheck: true,
+    },
+    async (request) => {
+        // user who called us:
+        const user = request.auth?.uid;
+        if (!user) {
+            return {error: "User not found"};
+        }
+        console.log(request.data);
+        const path = `users/${user}/messages`;
+
+        // check if the messages collection is empty:
+        const messages = await admin.firestore().collection(path).get();
+        let prompt = request.data.prompt;
+        if (messages.size == 0) {
+            // since this is the first prompt, the bot is missing all transaction context.
+            // let's add that in:
+            // get transactions from firestore:
+            const userDoc = await admin.firestore()
+                .collection("users")
+                .doc(user)
+                .get();
+
+            const transactions = userDoc.data()?.transactions;
+            logger.warn("got user transactions: ", transactions);
+
+            // Convert transactions to a string representation
+            const transactionsString = transactions.map((transaction: any, index: number) => {
+                // eslint-disable-next-line max-len
+                return `[Transaction ${index}; Amount: ${transaction.amount}, Date: ${transaction.date}, Currency: ${transaction.iso_currency_code}, Merchant: ${transaction.merchant_name}, Category: ${transaction.personal_finance_category}, Website: ${transaction.website}]`;
+            }).join("\n");
+
+            // eslint-disable-next-line max-len
+            prompt = `Answer the question based only on the following context: ${transactionsString} Question: _|_${request.data.prompt}`;
+        }
+
+        const ref: DocumentReference = await admin
+            .firestore()
+            .collection(path)
+            .add({
+                prompt: prompt,
+                parentMessageId: request.data.parentMessageId,
+            });
+
+        ref.onSnapshot((snap: DocumentSnapshot) => {
+            if (snap.get("response")) {
+                console.log(`RESPONSE: ${snap.get("response")}`);
+                return {response: snap.get("response")};
+            } else {
+                return {response: "No response yet"};
+            }
+        });
+        return {id: ref.id};
+    },
+);
+
+exports.deleteChat = onCall(
+    {
+        enforceAppCheck: true,
+    },
+    async (request) => {
+        // user who called us:
+        const user = request.auth?.uid;
+        if (!user) {
+            return {error: "User not found"};
+        }
+        const path = `users/${user}/messages`;
+        await deleteCollection(admin.firestore(), path, 10);
+        return {success: "Messages deleted"};
+    },
+);
+
+// eslint-disable-next-line require-jsdoc
+async function deleteCollection(db: firestore.Firestore, collectionPath: string, batchSize: number) {
+    const collectionRef = db.collection(collectionPath);
+    const query = collectionRef.orderBy("__name__").limit(batchSize);
+
+    return new Promise((resolve, reject) => {
+        deleteQueryBatch(db, query, resolve).catch(reject);
+    });
+}
+
+// eslint-disable-next-line require-jsdoc
+async function deleteQueryBatch(db: firestore.Firestore, query: firestore.Query<firestore.DocumentData,
+    firestore.DocumentData>, resolve: any) {
+    const snapshot = await query.get();
+
+    const batchSize = snapshot.size;
+    if (batchSize === 0) {
+        // When there are no documents left, we are done
+        resolve();
+        return;
+    }
+
+    // Delete documents in a batch
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+    });
+    await batch.commit();
+
+    // Recurse on the next process tick, to avoid
+    // exploding the stack.
+    process.nextTick(() => {
+        deleteQueryBatch(db, query, resolve);
+    });
+}
+
+interface Transaction {
+    amount: number;
+    personal_finance_category?: string;
+    date: string;
+    iso_currency_code: string | null;
+    name: string | null | undefined;
+    website?: string | null;
+}
+
+// eslint-disable-next-line require-jsdoc
+async function getTransactionData(uid: string) {
+    const userDoc = await admin.firestore().collection("users").doc(uid).get();
+    const accessToken = userDoc.data()?.plaidAccessToken;
+    if (accessToken == null) {
+        logger.error("invalid plaidAccessToken");
+        return {error: "invalid plaidAccessToken"};
+    }
+
+    // this will give us a comfortable 17 transactions
+    const transactionsGetRequest: TransactionsGetRequest = {
+        access_token: accessToken,
+        start_date: "2023-04-14",
+        end_date: "2024-04-17",
+    };
+
+    try {
+        const response = await plaidClient.transactionsGet(transactionsGetRequest);
+        const rawTransactions = response.data.transactions;
+        // logger.info("rawTransactions: ", rawTransactions);
+        const filteredTransactions: Transaction[] = [];
+        for (const transaction of rawTransactions) {
+            filteredTransactions.push({
+                amount: transaction.amount,
+                personal_finance_category: transaction.personal_finance_category?.primary,
+                date: transaction.date,
+                iso_currency_code: transaction.iso_currency_code,
+                name: transaction.name,
+                website: transaction.website,
+            });
+        }
+        logger.info("filteredTransactions: ", filteredTransactions);
+        return {transactions: filteredTransactions};
+    } catch (error) {
+        return {error: error};
+    }
+}

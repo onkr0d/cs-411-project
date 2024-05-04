@@ -47,5 +47,8 @@
       "enabled": true
     },
     "singleProjectMode": true
+  },
+  "extensions": {
+    "firestore-chatgpt-bot": "shiftescape/firestore-chatgpt-bot@0.0.2"
   }
 }

@@ -9,7 +9,7 @@
 ## Plaid && ChatGPT  
 - Install openai API with ``npm install --save openai``. 
 - Get API keys from your OpenAI Project, which can be created [here.](https://platform.openai.com/overviewh)
-- Install Plaid API with ``npm install plaid`` and get API keys from your Plaid Project
+- Install Plaid API with ``npm install plaid``.
 - Get API keys from your Plaid Project, which can be created [here.](https://plaid.com/docs/)
   
 ## Firebase:
